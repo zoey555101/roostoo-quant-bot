@@ -1,0 +1,1 @@
+{"interval":"15min","lookback_hours":24,"fast":20,"slow":50,"volatility_bars":96,"top_n":3,"gross_cap":0.70,"coin_cap":0.15,"rebalance_bars":4,"min_trade_weight":0.02,"fee_bps":10,"slippage_bps":5,"drawdown_stop":0.06,"initial_cash":100000}
