@@ -8,9 +8,9 @@ from quant.live import Blocked,atomic,plan,recover
 CONFIG=json.loads(Path(__file__).resolve().parents[1].joinpath('competition.json').read_text())
 
 class CompetitionTests(unittest.TestCase):
-    def fixture(self,when='2026-10-04T00:15:01Z'):
+    def fixture(self,when='2026-10-04T12:15:01Z'):
         now=int(pd.Timestamp(when).timestamp()*1000)
-        frames={s:pd.DataFrame({'close':[100.]},index=pd.DatetimeIndex([pd.Timestamp('2026-10-04T00:00:00Z')])) for s in c.SYMBOLS}
+        frames={s:pd.DataFrame({'close':[100.]},index=pd.DatetimeIndex([pd.Timestamp('2026-10-04T12:00:00Z')])) for s in c.SYMBOLS}
         exchange={'IsRunning':True,'TradePairs':{s[:-4]+'/USD':{'CanTrade':True,'AmountPrecision':4,'MiniOrder':1} for s in frames}}
         ticker={'Success':True,'ServerTime':now,'Data':{p:{'LastPrice':100,'MaxBid':99.99,'MinAsk':100.01} for p in exchange['TradePairs']}}
         balance={'Success':True,'SpotWallet':{'USD':{'Free':100000,'Lock':0}},'MarginWallet':{}}
@@ -36,7 +36,7 @@ class CompetitionTests(unittest.TestCase):
             client.timestamp.return_value=str(start+delta);self.assertEqual(c.gate(client,CONFIG),expected)
 
     def test_before_start_no_mutation_even_execute(self):
-        f,e,t,b,client=self.fixture('2026-10-03T23:59:59Z')
+        f,e,t,b,client=self.fixture('2026-10-04T11:59:59Z')
         n,state=self.run_cycle(client,{'intent':None},f,True)
         self.assertEqual(n,0);self.assertEqual(state['last_phase'],'WAITING_START')
 
@@ -56,7 +56,7 @@ class CompetitionTests(unittest.TestCase):
             submit.assert_not_called()
 
     def test_guard_rechecks_time_before_submit(self):
-        client=self.fixture('2026-10-03T23:59:59Z')[-1]
+        client=self.fixture('2026-10-04T11:59:59Z')[-1]
         with patch.dict(os.environ,{'ROOSTOO_ACCOUNT_MODE':'COMPETITION'}),patch('quant.competition.submit') as submit:
             with self.assertRaises(Blocked):c.execute_guarded(client,{},'.',{'side':'BUY'},CONFIG,True)
             submit.assert_not_called()
@@ -148,6 +148,26 @@ class CompetitionTests(unittest.TestCase):
                 proof=json.loads((root/'verification.json').read_text());self.assertEqual(proof['confirmed_order_id'],7)
                 self.assertIn('separate_process_query',proof['checks'])
             finally:os.chdir(previous)
+
+    def test_start_correction_preserves_recovery_and_risk(self):
+        previous=dict(CONFIG,start_utc='2026-10-04T00:00:00Z')
+        state={'config_hash':hashlib.sha256(json.dumps(previous,sort_keys=True).encode()).hexdigest(),'intent':{'order_id':7},'halted':True,'confirmed_fills':3,'account_hash':'bound'}
+        original=dict(state)
+        with tempfile.TemporaryDirectory() as d:
+            c.reconcile_config(state,d,CONFIG)
+            self.assertEqual(json.loads(Path(d,'state.before_start_correction.json').read_text()),original)
+            self.assertEqual(state['intent'],original['intent']);self.assertTrue(state['halted'])
+            self.assertEqual(state['confirmed_fills'],3);self.assertEqual(state['account_hash'],'bound')
+            c.reconcile_config(state,d,CONFIG)
+            self.assertEqual(len(Path(d,'events.jsonl').read_text().splitlines()),1)
+
+    def test_start_correction_rejects_unrelated_risk_change(self):
+        previous=dict(CONFIG,start_utc='2026-10-04T00:00:00Z',coin_cap=.04)
+        state={'config_hash':hashlib.sha256(json.dumps(previous,sort_keys=True).encode()).hexdigest()}
+        with tempfile.TemporaryDirectory() as d:
+            with self.assertRaises(Blocked):c.reconcile_config(state,d,CONFIG)
+        client=self.fixture('2026-10-04T00:00:00Z')[-1]
+        self.assertFalse(c.gate(client,CONFIG))
 
     def test_wrong_start_configuration_blocked(self):
         with tempfile.TemporaryDirectory() as d:

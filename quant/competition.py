@@ -21,7 +21,7 @@ def config_load(path):
     c=json.loads(Path(path).read_text())
     start=pd.Timestamp(c['start_utc'])
     if start.tzinfo is None:raise Blocked('Start timestamp needs explicit timezone')
-    if start!=pd.Timestamp('2026-10-04T00:00:00Z'):raise Blocked('Start must equal organizer-confirmed 08:00 Hong Kong Oct 4 2026')
+    if start!=pd.Timestamp('2026-10-04T12:00:00Z'):raise Blocked('Start must equal user-confirmed 20:00 Hong Kong Oct 4 2026')
     if not 0<float(c['coin_cap'])<=float(c['gross_cap'])<=.70:raise Blocked('Invalid exposure caps')
     if not 0<float(c['drawdown_stop'])<=.08:raise Blocked('Invalid drawdown guard')
     if not 1<=float(c['max_order_usd'])<=10000:raise Blocked('Invalid order cap')
@@ -150,6 +150,21 @@ def arm_execution(state):
         state['armed_verification']={k:proof[k] for k in ('test_account_hash','verified_utc','confirmed_order_id')}
 
 
+def reconcile_config(state,directory,c):
+    current=hashlib.sha256(json.dumps(c,sort_keys=True).encode()).hexdigest()
+    if state.get('config_hash')==current:return
+    previous=dict(c,start_utc='2026-10-04T00:00:00Z')
+    old_hash=hashlib.sha256(json.dumps(previous,sort_keys=True).encode()).hexdigest()
+    if c['start_utc']!='2026-10-04T12:00:00Z' or state.get('config_hash')!=old_hash:
+        raise Blocked('Config changed; retain state and review migration before changing risk')
+    # Only the corrected start time may migrate automatically. Keep every
+    # order intent, risk flag, account binding and fill record intact.
+    backup=Path(directory)/'state.before_start_correction.json'
+    if not backup.exists():atomic(backup,state)
+    audit(directory,'start_time_corrected',old_start_utc=previous['start_utc'],new_start_utc=c['start_utc'])
+    state['config_hash']=current
+
+
 def main():
     p=argparse.ArgumentParser(description='Competition long/cash runner; read-only unless --execute')
     p.add_argument('--profile',default='runtime/competition/credentials.json');p.add_argument('--state-dir',default='runtime/competition');p.add_argument('--config',default='competition.json');p.add_argument('--execute',action='store_true');p.add_argument('--once',action='store_true')
@@ -175,7 +190,7 @@ def main():
         state_path=directory/'state.json';config_hash=hashlib.sha256(json.dumps(c,sort_keys=True).encode()).hexdigest()
         state=json.loads(state_path.read_text()) if state_path.exists() else {'account_hash':account,'intent':None,'mode':'COMPETITION','config_hash':config_hash}
         if state.get('account_hash')!=account or state.get('mode')!='COMPETITION':raise SystemExit('State/account mode mismatch')
-        if state.get('config_hash')!=config_hash:raise SystemExit('Config changed; retain state and review migration before changing risk')
+        reconcile_config(state,directory,c)
         if a.execute:arm_execution(state)
         atomic(state_path,state);client=Roostoo();transient=0
         while True:

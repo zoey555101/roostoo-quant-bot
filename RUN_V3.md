@@ -1,12 +1,14 @@
 # V3 比赛部署版：按顺序执行
 
-这份代码补齐正式账户运行，沿用当前 momentum / EMA / inverse-volatility 策略。不是新的盈利验证，也不是已在你的正式账户完成部署。68 项自动测试通过；你的真实账户验证需要在 AWS 完成。
+本次更正依据你确认的开赛时间：20:00 HKT。替换此前含 08:00 的 V3 更新包和说明。
 
-开赛：**2026 年 10 月 4 日 08:00 香港时间 = 2026-10-04 00:00 UTC**。每笔下单前检查 Roostoo 校时后的时间。正式程序可提前启动等待，开赛前不提交交易。默认信号再平衡时点第一次约为香港 08:15，且必须有有效信号才下单。
+这份代码补齐正式账户运行，沿用当前 momentum / EMA / inverse-volatility 策略。不是新的盈利验证，也不是已在你的正式账户完成部署。70 项自动测试通过；你的真实账户验证需要在 AWS 完成。
+
+开赛：**2026 年 10 月 4 日 20:00 香港时间 = 2026-10-04 12:00 UTC**。每笔下单前检查 Roostoo 校时后的时间。正式程序可提前启动等待，开赛前不提交交易。默认信号再平衡时点第一次约为香港 20:15，且必须有有效信号才下单。
 
 ## 1. Mac：覆盖原项目并推送 GitHub
 
-把更新包下载到 Desktop（桌面），名称保持 `roostoo-quant-bot-v3-update.zip`。不要再新建 `roostoo-quant-bot 3` 等副本；使用已有项目路径。
+把更新包下载到 Desktop（桌面），名称保持 `roostoo-quant-bot-v3-2000hkt.zip`。不要再新建 `roostoo-quant-bot 3` 等副本；使用已有项目路径。
 
 在 Mac VS Code 终端逐行执行：
 
@@ -18,7 +20,7 @@ git status --short
 如果还有你自己的未提交代码，先提交或备份再覆盖。ZIP 不含 `.git`、密钥、runtime、历史数据，解压会覆盖同名代码文件。
 
 ```bash
-unzip -o /Users/mac/Desktop/roostoo-quant-bot-v3-update.zip -d /Users/mac/Desktop
+unzip -o /Users/mac/Desktop/roostoo-quant-bot-v3-2000hkt.zip -d /Users/mac/Desktop
 cd /Users/mac/Desktop/roostoo-quant-bot
 source .venv/bin/activate
 python -m unittest discover -s tests -q
@@ -27,9 +29,11 @@ git commit -m "Add gated competition runner and durable risk exits"
 git push --ipv4 origin master
 ```
 
-应显示 `Ran 68 tests ... OK`。如果 ZIP 被下载到 Downloads，把命令里的 ZIP 路径改为你实际位置。不要点击编辑器三角按钮直接运行 `quant/live.py`，应使用本文模块命令或脚本。
+应显示 `Ran 70 tests ... OK`。如果 ZIP 被下载到 Downloads，把命令里的 ZIP 路径改为你实际位置。不要点击编辑器三角按钮直接运行 `quant/live.py`，应使用本文模块命令或脚本。
 
-## 2. AWS：停止旧测试进程，再更新代码
+## 2. AWS：停止旧进程，再更新代码
+
+如果已安装旧 V3 正式服务，先执行 `sudo systemctl disable --now roostoo-competition`。如果尚未安装，跳过这条。
 
 如果每五分钟显示一行输出，按 **Ctrl+C** 停止；看到 `(.venv) ...$` 提示符后再粘贴命令。如果程序在 tmux 内，先 `tmux ls` 查看并进入原测试会话，按 Ctrl+C；不要新开另一份测试执行进程。
 
@@ -56,7 +60,15 @@ python -m unittest discover -s tests -q
 python -m quant.status
 ```
 
-不要删除 `runtime/` 或旧 state 文件，它们保存账户绑定和订单恢复状态。新代码保留旧测试账户凭据。
+不要删除 `runtime/` 或旧 state 文件，它们保存账户绑定和订单恢复状态。新代码保留旧测试账户凭据。若已运行旧 V3，程序只对“其余配置完全相同、仅开赛时间从 08:00 改为 20:00”的旧配置做兼容迁移，并保留原状态备份；未确认订单、风控状态和成交记录不会被清除。其他配置变更仍拒绝启动。
+
+确认配置：
+
+```bash
+python -c "import json; print(json.load(open('competition.json'))['start_utc'])"
+```
+
+必须输出 `2026-10-04T12:00:00Z`。
 
 ## 3. AWS：真实测试成交验证
 
@@ -122,7 +134,7 @@ sudo journalctl -u roostoo-competition -n 30 --no-pager
 
 ## 6. 开赛之后
 
-开赛后服务自动检查信号，不需要重新输密钥或手动买币。最早常规再平衡约 08:15 香港时间；无信号、差额不足或当天同一轮已处理时，可能仍然没有订单。
+开赛后服务自动检查信号，不需要重新输密钥或手动买币。最早常规再平衡约 20:15 香港时间；无信号、差额不足或当天同一轮已处理时，可能仍然没有订单。
 
 首次检查：
 
