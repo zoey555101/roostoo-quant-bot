@@ -1,4 +1,6 @@
-# Roostoo Quant Bot — Research + Test Execution V2
+# Roostoo Quant Bot — Competition Deployment V3
+
+正式部署请先阅读 [RUN_V3.md](RUN_V3.md)，验证范围见 [V3_VALIDATION.md](V3_VALIDATION.md)。正式执行默认关闭，必须通过独立测试成交验证和开赛时间门禁。
 
 第二版实时测试账户运行请先阅读 [RUN_V2.md](RUN_V2.md)，默认只读，测试执行需明确开启。以下为保留的第一版研究说明。
 
@@ -55,13 +57,13 @@ export ROOSTOO_SECRET_KEY='your-local-secret'
 python -m quant snapshot --private
 ```
 
-.env.example 仅为变量名称模板；程序读取 shell environment，不自动加载 .env。快照权限 0600；私有订单历史分页到最多 10000 条。签名按官方原始参数字符串（pair 中的 `/` 保留）排序，HMAC-SHA256，POST 使用 form body；通过 serverTime 校时。当前模块没有交易写接口，也未测试私有账户权限。
+.env.example 仅为变量名称模板；程序读取 shell environment，不自动加载 .env。快照权限 0600；私有订单历史分页到最多 10000 条。签名按官方原始参数字符串（pair 中的 `/` 保留）排序，HMAC-SHA256，POST 使用 form body；通过 serverTime 校时。本段说明第一版 snapshot 路径；V2/V3 的执行入口、授权和验证要求见上方运行文档。
 
 ## 已确认规则与待完成项
 
 上传规则截图：14 天交易期 Oct 4–17；至少 8 个 active trading days；$100000 模拟本金；spot 1x long/short、无杠杆；market 0.1%、limit 0.05%；禁止 HFT、market-making、arbitrage；要求自动执行证据及可追溯 commit。截图未显示年份/每日最低交易数量/评分年化细节，需核对主办方 FAQ。不得为了凑活跃日做无信号交易；当前策略可能不满足活跃日要求。
 
-这版尚未部署 EC2，没有自动实盘循环、做空、限价撮合、实时 Binance 数据轮询、订单持久化/断网重启恢复。下阶段需实现并验证：Roostoo 交易对映射与 USDT/USD 基差过滤；精度、最小名义金额与可交易状态；已成交/挂单/余额对账；禁止超时后盲目重试下单；订单状态和审计日志持久化；组合风险及活跃日监控；再部署 AWS。GitHub 远程仓库尚未建立。现有公开 API 文档提供独立 /v6 short endpoints，普通 SELL 不应被当作开空仓。
+V2/V3 已实现实时轮询、订单持久化与恢复、余额规范化、测试账户与比赛账户隔离，以及正式比赛时间门禁和后台服务脚本。用户侧部署与真实成交验证按 RUN_V3 执行；不支持做空或限价撮合。公开 API 的 /v6 short endpoints 与普通现货 SELL 不同。
 
 历史回测采用 Binance USDT 价格，Roostoo USD 账户价格、实际流动性、成交机制和费用可能不同；尚未加入最低订单额/数量精度/容量和延迟模型。回测末尾持仓按 close 标记，没有强制平仓，因此末尾没有额外平仓费用。固定交易宇宙存在选择偏差。任何回测结果都不保证比赛表现。
 

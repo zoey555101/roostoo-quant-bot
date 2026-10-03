@@ -1,6 +1,6 @@
 """Long/cash test-account runner. Default is read-only; never retry a submit."""
 import argparse
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from decimal import Decimal, ROUND_DOWN
 import fcntl
 import hashlib
@@ -93,7 +93,20 @@ def spot_wallet(balance):
     return wallet
 
 
-def plan(exchange,ticker,balance,weights,frames,max_order=99):
+@dataclass(frozen=True)
+class Limits:
+    coin_cap: float = .001
+    gross_cap: float = .003
+    cash_reserve: float = .30
+    min_trade_usd: float = 10
+    band_weight: float = .0002
+    band_usd_cap: float = 20
+    max_spread: float = .005
+    max_basis: float = .03
+
+
+def plan(exchange,ticker,balance,weights,frames,max_order=99,limits=None,emergency=False):
+    limits=limits or Limits()
     if exchange.get('IsRunning') is not True or ticker.get('Success') is not True or balance.get('Success') is not True:raise Blocked('Exchange/account not ready')
     pairs=exchange['TradePairs'];quotes=ticker['Data'];wallet=spot_wallet(balance)
     coins={s[:-4] for s in frames}
@@ -109,26 +122,26 @@ def plan(exchange,ticker,balance,weights,frames,max_order=99):
         quote=quotes[pair];bid=positive(quote['MaxBid'],'bid');ask=positive(quote['MinAsk'],'ask');last=positive(quote['LastPrice'],'last')
         if ask<bid:raise Blocked('Crossed Roostoo market')
         mid=(bid+ask)/2
-        if (ask-bid)/mid>.005:raise Blocked('Roostoo spread > 0.5%')
-        if abs(last/float(frames[symbol].close.iloc[-1])-1)>.03:raise Blocked('Roostoo/Binance basis > 3%')
+        if not emergency and (ask-bid)/mid>limits.max_spread:raise Blocked('Roostoo spread > 0.5%')
+        if not emergency and abs(last/float(frames[symbol].close.iloc[-1])-1)>limits.max_basis:raise Blocked('Roostoo/Binance basis > 3%')
         quantity=positive(wallet.get(coin,{}).get('Free',0),'coin balance',True)
         marks[symbol]=(pair,bid,ask,last,quantity);nav+=quantity*last
     if nav<=0:raise Blocked('Empty account')
     orders=[]
     for symbol,(pair,bid,ask,last,held) in marks.items():
         target=positive(weights[symbol],'target weight',True)
-        if target>.001+1e-12:raise Blocked('Test target exceeds 0.1% coin cap')
+        if target>limits.coin_cap+1e-12:raise Blocked('Target exceeds coin cap')
         delta=target*nav-held*last
         # No-trade band is at least $10 and 0.02% NAV. Sells beyond the test
         # budget are sliced on later bars; no blind liquidation of existing holdings.
-        if abs(delta)<max(10,min(20,nav*.0002)):continue
+        if not emergency and abs(delta)<max(limits.min_trade_usd,min(limits.band_usd_cap,nav*limits.band_weight)):continue
         side='BUY' if delta>0 else 'SELL';price=ask if side=='BUY' else bid
         notional=min(abs(delta),max_order)
-        if side=='BUY':notional=min(notional,max(0,cash-nav*.30)/(1.002))
+        if side=='BUY':notional=min(notional,max(0,cash-nav*limits.cash_reserve)/(1.002))
         quantity=quantize(min(notional/price,held) if side=='SELL' else notional/price,pairs[pair]['AmountPrecision'])
         if quantity<=0 or float(quantity)*price<=positive(pairs[pair]['MiniOrder'],'minimum order',True):continue
         orders.append({'pair':pair,'side':side,'quantity':format(quantity,'f'),'type':'MARKET','estimated_notional':float(quantity)*price})
-    if sum(float(weights[s]) for s in weights)>.003+1e-12:raise Blocked('Test gross target exceeds 0.3%')
+    if sum(float(weights[s]) for s in weights)>limits.gross_cap+1e-12:raise Blocked('Target exceeds gross cap')
     return nav,sorted(orders,key=lambda x:x['side']=='BUY')
 
 
@@ -163,6 +176,11 @@ def recover(client,state,directory):
     order=exact[0];status=order.get('Status')
     audit(directory,'order_reconciled',order_id=intent['order_id'],status=status,filled_quantity=order.get('FilledQuantity'),filled_price=order.get('FilledAverPrice'),fee=order.get('CommissionChargeValue'))
     if status not in ('FILLED','CANCELED'):raise Blocked('Order remains pending or unknown; new orders blocked')
+    if status=='FILLED':
+        state['confirmed_fills']=int(state.get('confirmed_fills',0))+1
+        state['last_fill']={'order_id':intent['order_id'],'pair':intent.get('pair'),'side':intent.get('side'),'quantity':order.get('FilledQuantity'),'price':order.get('FilledAverPrice'),'fee':order.get('CommissionChargeValue')}
+        day=pd.Timestamp.now(tz='Asia/Hong_Kong').strftime('%Y-%m-%d')
+        state['active_days']=sorted(set(state.get('active_days',[]))|{day})
     state['intent']=None;atomic(Path(directory)/'state.json',state)
 
 
