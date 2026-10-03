@@ -75,13 +75,32 @@ def quantize(quantity, precision):
     return Decimal(str(quantity)).quantize(Decimal(1).scaleb(-precision),rounding=ROUND_DOWN)
 
 
+def spot_wallet(balance):
+    """Normalize documented Wallet and observed SpotWallet without masking errors."""
+    if not isinstance(balance,dict) or balance.get('Success') is not True:
+        raise Blocked('Balance query not confirmed')
+    wallet=balance['SpotWallet'] if 'SpotWallet' in balance else balance.get('Wallet')
+    if not isinstance(wallet,dict) or not isinstance(wallet.get('USD'),dict):
+        raise Blocked('Missing spot wallet or USD balance')
+    margin=balance.get('MarginWallet',{})
+    if not isinstance(margin,dict):raise Blocked('Invalid margin wallet schema')
+    if margin:raise Blocked('Margin wallet exists; this runner supports spot only')
+    for coin,entry in wallet.items():
+        if not isinstance(coin,str) or not isinstance(entry,dict):
+            raise Blocked('Invalid spot wallet entry')
+        for field in ('Free','Lock','PendingOrders','ShortCollateral'):
+            positive(entry.get(field,0),field,True)
+    return wallet
+
+
 def plan(exchange,ticker,balance,weights,frames,max_order=99):
     if exchange.get('IsRunning') is not True or ticker.get('Success') is not True or balance.get('Success') is not True:raise Blocked('Exchange/account not ready')
-    pairs=exchange['TradePairs'];quotes=ticker['Data'];wallet=balance['Wallet']
+    pairs=exchange['TradePairs'];quotes=ticker['Data'];wallet=spot_wallet(balance)
     coins={s[:-4] for s in frames}
     for coin,entry in wallet.items():
         free=positive(entry.get('Free',0),'free balance',True);locked=positive(entry.get('Lock',0),'locked balance',True)
-        if locked>1e-8:raise Blocked('Locked balance exists; pending orders/short collateral need review')
+        reserved=sum(positive(entry.get(field,0),field,True) for field in ('PendingOrders','ShortCollateral'))
+        if locked>1e-8 or reserved>1e-8:raise Blocked('Locked balance exists; pending orders/short collateral need review')
         if coin not in coins|{'USD'} and free>1e-8:raise Blocked('Account has assets outside selected universe')
     cash=positive(wallet.get('USD',{}).get('Free',0),'USD balance',True);nav=cash;marks={}
     for symbol in frames:
@@ -180,7 +199,7 @@ def cycle(client,state,directory,execute=False):
     # Also cap the test target at $100 per coin, including larger test wallets.
     weights={s:min(w,100/nav) for s,w in weights.items()}
     nav,orders=plan(exchange,ticker,balance,weights,frames)
-    usd=float(balance['Wallet'].get('USD',{}).get('Free',0))
+    usd=positive(spot_wallet(balance)['USD'].get('Free',0),'USD balance',True)
     if nav-usd>max(315,nav*.00315):raise Blocked('Existing holdings exceed test scope; use a clean dedicated test account')
     state['high_water']=max(float(state.get('high_water',nav)),nav)
     if nav/state['high_water']-1<=-.06:state['halted']=True
@@ -262,7 +281,8 @@ def main():
             except Exception as e:
                 # Do not log exception text: transport errors may contain URLs.
                 audit(directory,'stopped',error_type=type(e).__name__,has_unresolved_intent=bool(state.get('intent')))
-                print('Stopped safely:',str(e) if isinstance(e,(Blocked,RuntimeError)) else type(e).__name__,flush=True)
+                reason=str(e) if isinstance(e,(Blocked,RuntimeError)) else ('Missing response field: '+str(e.args[0]) if isinstance(e,KeyError) else type(e).__name__)
+                print('Stopped safely:',reason,flush=True)
                 raise SystemExit(1)
             if a.once:return
             try:time.sleep(a.poll_seconds)

@@ -4,7 +4,7 @@
 
 ## 1. 更新 Mac 项目
 
-解压 `roostoo-quant-bot-v2-update.zip`。如果 ZIP 保存在 Mac 的 Downloads，可在 VS Code 终端执行 `unzip -o ~/Downloads/roostoo-quant-bot-v2-update.zip -d ~/Desktop`。包内只包含源码、测试和说明，不包含 `.git` 或 `.venv`。也可手动将其中 `roostoo-quant-bot/` 里的文件覆盖复制到已有 `/Users/mac/Desktop/roostoo-quant-bot/`，合并 quant、tests、scripts 文件夹。**不要删除整个旧项目，也不要删除 `.git`、`.venv`。**更新包没有密钥、运行状态、历史数据或 `.git`。
+解压 `roostoo-quant-bot-v2-wallet-fix.zip`。如果 ZIP 保存在 Mac 的 Downloads，可在 VS Code 终端执行 `unzip -o ~/Downloads/roostoo-quant-bot-v2-wallet-fix.zip -d ~/Desktop`。包内只包含源码、测试和说明，不包含 `.git` 或 `.venv`。也可手动将其中 `roostoo-quant-bot/` 里的文件覆盖复制到已有 `/Users/mac/Desktop/roostoo-quant-bot/`，合并 quant、tests、scripts 文件夹。**不要删除整个旧项目，也不要删除 `.git`、`.venv`。**更新包没有密钥、运行状态、历史数据或 `.git`。
 
 Mac 的 VS Code 终端：
 
@@ -14,7 +14,7 @@ source .venv/bin/activate
 python -m unittest discover -s tests -v
 ```
 
-应有 40 项通过。若某一步失败先停止。成功后提交本次新增及修改文件：
+应有 49 项通过。若某一步失败先停止。成功后提交本次新增及修改文件：
 
 ```bash
 git add .gitignore quant tests scripts RUN_V2.md V2_VALIDATION.md README.md

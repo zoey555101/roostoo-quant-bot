@@ -125,4 +125,38 @@ class LiveTests(unittest.TestCase):
         client=Mock();client.request.return_value={'Success':True}
         with self.assertRaises(Blocked):short_check(client)
 
+    def test_spot_wallet_schema(self):
+        f,e,t,b=self.fixture();b['SpotWallet']=b.pop('Wallet')
+        b['SpotWallet']['USD'].update(PendingOrders=0,ShortCollateral=0)
+        nav,orders=plan(e,t,b,{s:.001 for s in f},f)
+        self.assertEqual(nav,100000);self.assertEqual(len(orders),3)
+    def test_short_collateral_blocks(self):
+        f,e,t,b=self.fixture();b['SpotWallet']=b.pop('Wallet');b['SpotWallet']['USD']['ShortCollateral']=10
+        with self.assertRaises(Blocked):plan(e,t,b,{s:.001 for s in f},f)
+    def test_pending_reserve_blocks(self):
+        f,e,t,b=self.fixture();b['Wallet']['USD']['PendingOrders']=10
+        with self.assertRaises(Blocked):plan(e,t,b,{s:.001 for s in f},f)
+    def test_missing_wallet_blocks(self):
+        f,e,t,b=self.fixture();del b['Wallet']
+        with self.assertRaises(Blocked):plan(e,t,b,{s:.001 for s in f},f)
+
+    def test_invalid_spot_entry_blocks(self):
+        f,e,t,b=self.fixture();b['SpotWallet']={'USD':100}
+        with self.assertRaises(Blocked):plan(e,t,b,{s:0 for s in f},f)
+    def test_invalid_spot_does_not_fallback(self):
+        f,e,t,b=self.fixture();b['SpotWallet']=None
+        with self.assertRaises(Blocked):plan(e,t,b,{s:0 for s in f},f)
+    def test_margin_wallet_blocks(self):
+        f,e,t,b=self.fixture();b['MarginWallet']={'USD':{'Free':10}}
+        with self.assertRaises(Blocked):plan(e,t,b,{s:0 for s in f},f)
+    def test_negative_reserved_blocks(self):
+        f,e,t,b=self.fixture();b['Wallet']['USD']['PendingOrders']=-1
+        with self.assertRaises(Blocked):plan(e,t,b,{s:0 for s in f},f)
+    def test_full_cycle_spotwallet(self):
+        frames,client,b=self.runner_fixture();b['SpotWallet']=b.pop('Wallet')
+        b['SpotWallet']['USD'].update(PendingOrders=0,ShortCollateral=0);b['MarginWallet']={}
+        with tempfile.TemporaryDirectory() as directory,patch('quant.live.market_frames',return_value=frames),patch('quant.live.targets',return_value=pd.DataFrame({s:[.001] for s in frames})),patch('quant.live.submit') as submit_mock:
+            cycle(client,{'intent':None},directory,False)
+            submit_mock.assert_not_called()
+
 if __name__=='__main__':unittest.main()
