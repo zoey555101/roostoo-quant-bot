@@ -1,7 +1,11 @@
 .env
+.env.*
+!.env.example
 .venv/
 __pycache__/
 *.pyc
 data/
 logs/
 reports/
+runtime/
+.DS_Store

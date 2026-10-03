@@ -1,4 +1,4 @@
-"""Read-only Roostoo client: no trade mutation endpoint exposed in MVP."""
+"""Roostoo HTTP/signature client; live runner gates trade mutations."""
 import hashlib
 import hmac
 import json

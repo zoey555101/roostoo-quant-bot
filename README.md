@@ -1,4 +1,6 @@
-# Roostoo Quant Bot — 第一版研究 MVP
+# Roostoo Quant Bot — Research + Test Execution V2
+
+第二版实时测试账户运行请先阅读 [RUN_V2.md](RUN_V2.md)，默认只读，测试执行需明确开启。以下为保留的第一版研究说明。
 
 Python 3.11+。默认 long/cash，不提交交易。第一版实现数据→信号→资金账本回测→时间顺序验证，以及 Roostoo 只读行情/账户/订单快照。
 
