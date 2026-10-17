@@ -1,3 +1,4 @@
+[111-README.md](https://github.com/user-attachments/files/33600450/111-README.md)
 # LearningByMistakes — Roostoo Quant Trading Bot
 
 **Team:** Team61-LearningByMistakes (HKU)  
@@ -14,6 +15,22 @@ The design aims to retain participation in positive trends while limiting portfo
 The competition account progressed from an initial three-coin strategy to Cross-Asset V2 and then Hybrid V3. Consequently, the competition account's full return history must not be attributed entirely to Hybrid V3. **Fusion V4 is a separate TEST-account research candidate; production migration has not been confirmed.** The latest Fusion exit-filter patch was not confirmed as uploaded or installed when this document was prepared.
 
 A service record supplied on 17 October identifies Hybrid V3, with a process start at `2026-10-07T18:35:08Z` and an abnormal exit at `2026-10-09T12:45:51Z` (exit status 1). This is evidence of an operational interruption, not continuous operation through the competition end. Subsequently supplied systemd status confirmed the service remained failed at the time of inspection on 17 October. The journal records `Stopped safely: Invalid Free`. A read-only competition balance query identified SPCXB `Free = -0.001`, with zero Lock, PendingOrders and ShortCollateral. Exchange AmountPrecision is 3, so the deficit equals one quantity increment. This does not by itself prove the exchange or client caused the discrepancy. No final account return, official ratio, or rank is asserted here without the final records.
+
+### How we developed the strategy
+
+The strategy evolved from concrete problems observed during research and deployment:
+
+1. **Limited participation:** the initial BTC/ETH/SOL portfolio had low exposure and could not participate in trends outside that universe. We expanded the eligible universe and made holding count depend on qualifying signals. Expansion was a hypothesis about opportunity coverage, not proof of diversification: crypto and bStocks can remain strongly correlated.
+2. **Exposure should depend on risk:** a fixed holding count or fixed invested percentage ignores changes in market variability. We combined inverse-volatility weighting with portfolio covariance-based exposure scaling, then imposed instrument, bStock and gross caps. This improves the explicitness of risk budgeting but depends on backward-looking estimates.
+3. **Whipsaw and costs:** attribution showed that positive price P&L could be consumed by turnover costs. We introduced persistent entry/exit conditions, target smoothing, a no-trade band and reversal controls. We also separated patient ordinary execution from urgent protective execution. These are responses to measured problems; their introduction is not evidence that the final strategy outperformed the original out of sample.
+4. **Selling must be explicit:** buying eligibility alone does not define when a position should close. The implementation separates trend deterioration, trailing ATR protection, exposure reduction and portfolio drawdown liquidation. A risk exit can intentionally sell at a loss rather than wait indefinitely to break even.
+5. **A different hypothesis belongs in a separate candidate:** the request for buying rebounds after temporary weakness motivated Fusion V4's mean-reversion sleeve. We kept this TEST-only rather than claiming that an unvalidated blend produced the competition account's results.
+
+The economic hypothesis of Hybrid V3 is trend persistence after confirmation, with risk-scaled participation and bounded execution costs. It is not a market-making, arbitrage or guaranteed buy-low/sell-high strategy. The historical findings and live interruption below are part of assessing that hypothesis, including evidence against it.
+
+### Portfolio curation: from universe to actual holdings
+
+The configured universe is screened for usable data, trading permission, liquidity and signal eligibility. The allocator assigns relative weights using inverse volatility and scales the mix using covariance. Strategy confirmation and holding hysteresis then determine whether to enter, retain, or exit each asset. Targets are smoothed and capped, and residual allocation stays in USD. Existing holdings can remain through hysteresis even when they would not qualify as new purchases. The order planner converts target-minus-current-value differences into executable slices; actual holdings therefore need not equal the theoretical allocation at every instant.
 
 ## 2. Competition evaluation
 
@@ -116,6 +133,10 @@ The documented exchange fee schedule and observed test fills are:
 
 Fee accounting uses the exchange-reported commission and role rather than assuming every submitted limit fills as intended. A $50,000 fill at 0.1% costs $50; dividing it into ten $5,000 fills at the same rate still costs approximately $50. Lower turnover and a greater maker share can reduce costs; larger tickets alone do not.
 
+For an executed quantity q and average price p, traded notional is q × p and commission is taken from the exchange response. In an isolated matched round trip, net price P&L is sell proceeds minus buy expenditure minus both sides' fees; separate research attribution also deducts modeled slippage. An unfilled or canceled remainder is not charged as though it traded. Partial-fill reconciliation accounts for incremental quantities and fees to avoid charging the same update twice.
+
+Hybrid V3's cost controls are primarily execution choice, turnover limits, bands and reversal filtering. Its trend-entry rule does not estimate an expected return guaranteed to exceed round-trip fees. Fusion V4's additional cost-room checks are TEST-only. A lower maker rate must be considered alongside non-fill risk and adverse selection; ordinary orders do not automatically become market orders just because they remain unfilled.
+
 Normal quote checks include a 0.5% maximum spread and a 3% reference-price deviation check. Normal polling is 60 seconds; five-minute bars do not require a trade every five minutes. The competition runner has a five-second subsequent polling interval during certain risk/overdue exits, used for liquidation management rather than a latency-arbitrage signal.
 
 Only one owned live order is managed at a time. Submission intent is persisted before the API request; fills are reconciled by order ID. Cancellation requires exchange confirmation before replacement. Unknown submission outcomes are retained for reconciliation rather than blindly resubmitted.
@@ -157,6 +178,10 @@ For the old three-coin `v3_current` research control at 10 bps fee / 5 bps slipp
 | June 2026 | $231.74 | $540.62 | $270.31 | -$579.19 |
 | July 2026 | $596.93 | $588.70 | $294.35 | -$286.12 |
 | September 2026 | $575.50 | $700.66 | $350.33 | -$475.49 |
+
+The earlier fixed-parameter studies used 15-minute history, each complete month independently initialized with $100,000 and four prior days of warm-up. Reported June/July/September evaluation lengths were 2,880/2,976/2,880 bars per asset. The three fee/slippage cases were 10/5, 10/10 and 20/20 bps per side. These assumptions must not be silently substituted for the later five-minute production runner.
+
+The lower-turnover study added August and compared hourly control, four-hour and twelve-hour schedules, matching passive benchmarks and separately cash-started 14-day windows. Its parameters were fixed for that study. Month/window overlaps and alternative costs are not independent samples. Historical maker fills, queue position, cancellation races, partial fills and latency were not faithfully modeled; maker/taker execution evidence below is a separate forward test. There is no claim here that the final Hybrid V3 or Fusion V4 has passed a complete matched historical backtest.
 
 This motivated reduced unnecessary turnover and explicit maker/taker execution, rather than indiscriminate increases in trading frequency or position size. These are independently cash-started months, not a continuous compounded performance record.
 
@@ -214,6 +239,36 @@ Historical research commands and input manifests should be run from each include
 | `tests/` | Accounting, signals, order-state and recovery regression tests |
 
 Later modules may exist only in downloaded patch packages or the deployed AWS working tree. A ZIP uploaded to GitHub does **not** automatically install its source into the repository. The final private submission must include the actual source files and compatible configuration, not merely this README and assorted patch ZIPs. Preserve commit dates and distinguish post-deadline documentation/repairs from code used during competition.
+
+### How the code implements the idea
+
+The production path is `hybrid_v3_competition.main` → `hybrid_v3_live_engine.cycle`. In simplified form, a cycle performs:
+
+```text
+Synchronize exchange time and verify account/configuration binding
+Reconcile the previous intent; check outstanding orders and wallet integrity
+Read executable quotes and evaluate portfolio / persisted trailing-stop risk
+When needed and permitted, obtain aligned closed-bar signal history
+Compute confirmed entry/exit decisions and risk-scaled target weights
+Apply exposure caps, trading bands, turnover and execution constraints
+Persist one intent, then submit at most one order in this cycle
+Reconcile fills and reported commissions; persist recovery state and audit
+```
+
+This is a conceptual reading guide, not an alternative executable implementation. Risk/overdue exits can bypass new public signal downloads, and pending-order cancellation/reconciliation can alter the path. Always use the actual cycle and its tests for exact ordering.
+
+| Design idea | Code location / behavior |
+| --- | --- |
+| Broader opportunities without a fixed top-three rule | `cross_asset_v2_allocator.allocate` constructs weights over eligible input series |
+| Volatility and co-movement determine exposure | `cross_asset_v2_risk.risk_budget`, called by `allocate` |
+| Confirmation and hysteresis prevent reacting to every tick | `hybrid_v3_live_strategy.target_weights` records decisions and confirmed signals |
+| Targets remain within instrument and group budgets | `hybrid_v3_live_strategy.cap_weights` |
+| A trailing stop must not loosen | `hybrid_v3_live_strategy.protective_exits` updates peaks and stop levels |
+| Reduce trading and distinguish urgent selling | `hybrid_v3_live_orders.plan_orders` applies bands, economic filters and LIMIT/MARKET routing |
+| Prevent duplicate submission after uncertain responses | Order intent persistence plus `submit`, `reconcile`, `cancel`, and account locks |
+| Account for the actual cost of fills | Reconciliation records incremental filled notional and reported commission rather than charging unfilled requests |
+
+A five-minute signal resolution, a 60-second ordinary polling interval, and an actual trade are different events. The code may poll repeatedly without a new bar, recompute a target without a material deviation, or plan an order without obtaining a fill. We do not present any of these as equivalent to a profitable executed trade.
 
 ### Evidence to include with the private submission
 
