@@ -1,7 +1,7 @@
 [111-README.md](https://github.com/user-attachments/files/33600450/111-README.md)
 # LearningByMistakes — Roostoo Quant Trading Bot
 
-**Team:** Team61-LearningByMistakes (HKU)  
+**Solo participants:** Team name:LearningByMistakes (HKU)  
 **Competition:** Roostoo APAC Quant Trading Hackathon  
 **Documentation date:** 17 October 2026, Hong Kong time  
 **Confirmed competition entry point:** `python -m quant.hybrid_v3_competition --execute`
